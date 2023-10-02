@@ -160,10 +160,18 @@ cython_debug/
 #.idea/
 
 datasets/
-poetry.lock
+*poetry.lock
 *wandb/
-model_checkpoints/
 *.DS_Store
 *.vscode/
 *report/
 *.venv/
+*data/
+
+
+model_checkpoints/
+*bert-finetune_models/
+*data-df/
+*original-data/
+poetry.lock
+*w2v-models/

@@ -1,114 +1,74 @@
 # %%
 import torch
+import torch_geometric.transforms as T
+from torch_geometric.nn import to_hetero
 import torch.nn.functional as F
 
-from pathlib import Path
-import pandas as pd
+from tqdm.auto import tqdm
+from src.hetero_generator import get_hetero_data, load_variables
+from src.models import GNN, GAT
+from src.utils import compute_metrics, set_seeds
 
-from main import (
-    DocDocGraphType,
-    DocWordGraphType,
-    WordWordGraphType,
-    DocEmbeddingType,
-    WordEmbeddingType,
-)
-from torch_geometric.data import HeteroData
-from utils import (
-    get_tfidf,
-    get_w2v_embeddings,
-    get_w2v_knn_graph,
-)
-
-from dataclasses import dataclass
+dataset_name = "mr"
+processed_dataset, vocab, stoi, itos = load_variables(dataset_name)
+data = get_hetero_data(dataset_name, processed_dataset, doc_doc_k=20)
 
 
-@dataclass
-class TypeConfig:
-    doc_emb_type: DocEmbeddingType
-    word_emb_type: WordEmbeddingType
-    dd_g_type: DocDocGraphType
-    ww_g_type: WordWordGraphType
-    dw_g_type: DocWordGraphType
+data = T.ToUndirected()(data)
+data = T.AddSelfLoops()(data)
+#! feature normalize edince bok gibi oluyor neden bak
+# data = T.NormalizeFeatures()(data)
+data_doc = data["doc"]
+
+seed_no = 43
 
 
-import pickle
+def train(model, optimizer, data_doc, max_epochs=100):
+    set_seeds(seed_no)
+    t = tqdm(range(max_epochs))
+    best_test_acc = 0
+    for epoch in t:
+        model.train()
+        optimizer.zero_grad()
+        out = model(data.x_dict, data.edge_index_dict)["doc"]
+        out = F.log_softmax(out, dim=1)
+
+        train_mask = data_doc.train_mask
+        test_mask = data_doc.test_mask
+        y = data_doc.y.reshape(-1)
+
+        loss = F.nll_loss(out[train_mask == 1], y[train_mask == 1])
+        loss.backward()
+        optimizer.step()
+
+        model.eval()
+        with torch.no_grad():
+            _, _, _, train_acc = compute_metrics(
+                out[train_mask == 1], y[train_mask == 1]
+            )
+            _, _, _, test_acc = compute_metrics(out[test_mask == 1], y[test_mask == 1])
+
+        if test_acc > best_test_acc:
+            best_test_acc = test_acc
+
+        t.set_description(
+            f"Loss: {loss:.4f}, Best Test Acc: {100* best_test_acc:.3f} , Train Acc: {100*train_acc:.3f}"
+        )
 
 
-class TBD:
-    def __init__(self, dataset_name, type: TypeConfig):
-        df = pd.read_csv(Path.cwd() / f"data-df/{dataset_name}.csv")
+set_seeds(seed_no)
+print("**************GAT RESULTS***************")
+model = GAT(hidden_channels=64, out_channels=processed_dataset.n_class)
+model = to_hetero(model, data.metadata(), aggr="sum")
+optimizer = torch.optim.Adam(model.parameters(), lr=0.05)
 
-        self.documents = df["doc_content"].values
+train(model, optimizer, data_doc, max_epochs=50)
+print("**************GNN RESULTS***************")
+model = GNN(hidden_channels=64, out_channels=processed_dataset.n_class)
+model = to_hetero(model, data.metadata(), aggr="sum")
+optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
 
-        with open(Path.cwd() / f"w2v-models/{dataset_name}/vocab.pkl", "rb") as file:
-            self.vocab = pickle.load(file)
+train(model, optimizer, data_doc, max_epochs=100)
 
-        self.stoi = {word: i for i, word in enumerate(self.vocab)}
-        self.itos = {i: word for i, word in enumerate(self.vocab)}
-
-        self.dataset_name = dataset_name
-        self.type = type
-
-        # HeteroData
-        self.data = HeteroData()
-        self.data["doc"].x = self.get_doc_embeddings()
-        self.data["doc"].y = df["label"].values
-        self.data["doc"].train_mask = df["train_mask"].values
-        self.data["doc"].test_mask = df["test_mask"].values
-
-        self.data["word"].x = self.get_word_embeddings()
-
-        e_i, e_a = self.get_word_word_graph()
-        self.data["word", "w2w", "w"].edge_index = e_i
-        self.data["word", "w2w", "w"].edge_attr = e_a
-
-        e_i, e_a = self.get_doc_word_graph()
-        self.data["doc", "d2w", "word"].edge_index = e_i
-        self.data["doc", "d2w", "word"].edge_attr = e_a
-
-        e_i, e_a = self.get_doc_doc_graph()
-        self.data["doc", "d2d", "doc"].edge_index = e_i
-        self.data["doc", "d2d", "doc"].edge_attr = e_a
-
-    def get_word_embeddings(self):
-        if self.type.word_emb_type is WordEmbeddingType.Word2Vec:
-            embeddings = get_w2v_embeddings(self.dataset_name)
-
-        elif self.type.word_emb_type is WordEmbeddingType.OneHot:
-            pass
-
-        return embeddings
-
-    def get_doc_embeddings(self):
-        pass
-
-    def get_word_word_graph(self):
-        if self.type.ww_g_type is WordWordGraphType.word2vecKNN:
-            edge_index, edge_attr = get_w2v_knn_graph(self.data["word"].x, k=30)
-
-        elif self.type.ww_g_type is WordWordGraphType.PPMI:
-            pass
-
-        return edge_index, edge_attr
-
-    def get_doc_doc_graph(self):
-        edge_index, edge_attr = 0, 0
-        return edge_index, edge_attr
-
-    def get_doc_word_graph(self):
-        if self.type.dd_g_type is DocWordGraphType.TFIDF:
-            edge_index, edge_attr = get_tfidf(self.documents, self.vocab, self.stoi)
-
-        return edge_index, edge_attr
-
-
-hetero_graph = TBD(
-    dataset_name="mr",
-    doc_emb_type=DocEmbeddingType.RoBERTa,
-    word_emb_type=WordEmbeddingType.Word2Vec,
-    dd_g_type=DocDocGraphType.RoBERTaKNN,
-    ww_g_type=WordWordGraphType.word2vecKNN,
-    dw_g_type=DocWordGraphType.TFIDF,
-)
 
 # %%

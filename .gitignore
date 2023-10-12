@@ -170,8 +170,9 @@ datasets/
 
 
 model_checkpoints/
-*bert-finetune_models/
+*processed-data/
 *data-df/
 *original-data/
 poetry.lock
 *w2v-models/
+*tf-idf-graphs/

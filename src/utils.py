@@ -1,16 +1,18 @@
-from enum import Enum, auto
 import numpy as np
 import torch
 import torch.nn.functional as F
 from gensim.models.word2vec import KeyedVectors
 from gensim.models import Word2Vec
 from pathlib import Path
+from sklearn.metrics import accuracy_score, f1_score
+import random
 
 
-class KNNType(Enum):
-    # TODO: add other types in future
-    ZeroMask = auto()
-    SoftMax = auto()
+def set_seeds(seed_no: int = 42):
+    random.seed(seed_no)
+    np.random.seed(seed_no)
+    torch.manual_seed(seed_no)
+    torch.cuda.manual_seed_all(seed_no)
 
 
 def get_tfidf(documents, vocab, stoi):
@@ -68,7 +70,7 @@ def get_tfidf(documents, vocab, stoi):
 def get_knn_from_similarity_matrix(
     A: torch.Tensor,
     k: int = 10,
-    strategy: KNNType = KNNType.ZeroMask,
+    # strategy: KNNType = KNNType.ZeroMask,
 ):
     """
     Creating a KNN graph from similarity matrix
@@ -84,12 +86,10 @@ def get_knn_from_similarity_matrix(
     mask = torch.zeros_like(A_hat)
     mask.scatter_(1, top_k_indices, 1)
     A_hat_masked = A_hat * mask
-
-    if strategy is KNNType.ZeroMask:
-        return A_hat_masked
-    else:
-        A_hat_masked[A_hat_masked == 0] = -float("inf")
-        return F.softmax(A_hat_masked, dim=1)
+    return A_hat_masked
+    # else:
+    # A_hat_masked[A_hat_masked == 0] = -float("inf")
+    # return F.softmax(A_hat_masked, dim=1)
 
 
 def sanity_check_for_embedding_matrix(
@@ -116,9 +116,29 @@ def get_w2v_embeddings(dataset_name: str):
     return embeddings
 
 
-def get_w2v_knn_graph(X: torch.tensor, k: int = 10):
-    A = F.cosine_similarity(X.unsqueeze(1), X.unsqueeze(0), dim=2)
-    A = get_knn_from_similarity_matrix(A, k=k, strategy=KNNType.ZeroMask)
-    edge_index = torch.nonzero(A, as_tuple=False).t()
-    edge_attr = A[edge_index[0], edge_index[1]]
+from sklearn.neighbors import kneighbors_graph as knn_graph
+import scipy.sparse as sp
+
+
+def get_knn_graph(X: torch.tensor, n_neighbours: int = 10):
+    A = knn_graph(X, n_neighbours, mode="distance", include_self=True, p=2)
+    if not sp.issparse(A):
+        A = sp.csr_matrix(A)
+
+    row_indices, col_indices = A.nonzero()
+    edge_index = np.vstack((row_indices, col_indices))
+    edge_attr = A[row_indices, col_indices]
+    edge_index = torch.tensor(edge_index, dtype=torch.long)
+    edge_attr = torch.tensor(edge_attr, dtype=torch.float)
     return edge_index, edge_attr
+
+
+def compute_metrics(output, labels):
+    preds = output.max(1)[1].type_as(labels)
+    y_true = labels.cpu().numpy()
+    y_pred = preds.cpu().numpy()
+    w_f1 = f1_score(y_true, y_pred, average="weighted")
+    macro = f1_score(y_true, y_pred, average="macro")
+    micro = f1_score(y_true, y_pred, average="micro")
+    acc = accuracy_score(y_true, y_pred)
+    return w_f1, macro, micro, acc

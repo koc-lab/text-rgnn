@@ -1,11 +1,11 @@
 # %%
-from pathlib import Path
 import torch
 import wandb
 import torch.nn.functional as F
 from tqdm.auto import tqdm
 import copy
 from src.dataset import GraphDataset
+from src.utils import compute_metrics
 
 
 class Trainer:
@@ -13,30 +13,33 @@ class Trainer:
         self,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        data: GraphDataset,
-        device: torch.device,
+        graph_dataset: GraphDataset,
     ):
         self.optimizer = optimizer
-        self.data = data
-        self.device = device
+        self.model = model
 
-        self.model = model.to(device)
+        self.graph_dataset = graph_dataset
+        self.data = self.graph_dataset.data
+        self.data_doc = self.data["doc"]
+
+        self.train_mask = self.data_doc.train_mask
+        self.test_mask = self.data_doc.test_mask
+        self.y = self.data_doc.y.reshape(-1)
 
     def pipeline(
         self,
         max_epochs: int,
         patience: int,
-        wandb_flag: bool = True,
-        early_stop_verbose: bool = False,
+        wandb_flag: bool = False,
     ):
-        early_stopping = EarlyStopping(patience=patience, verbose=early_stop_verbose)
+        early_stopping = EarlyStopping(patience=patience, verbose=False)
 
         t = tqdm(range(max_epochs))
         for epoch in t:
             self.model.train()
             e_loss = self.train_epoch()
 
-            train_acc, test_acc = self.eval_model(self.data)
+            train_acc, test_acc = self.eval_model()
 
             if wandb_flag:
                 epoch_wandb_log(e_loss, train_acc, test_acc, epoch)
@@ -55,35 +58,32 @@ class Trainer:
     def train_epoch(self):
         loss = 0
         self.model.train()
-
         self.optimizer.zero_grad()
 
-        self.data.X = self.data.X.to(self.device)
-        self.data.y = self.data.y.to(self.device)
+        out = self.model(self.data.x_dict, self.data.edge_index_dict)["doc"]
+        out = F.log_softmax(out, dim=1)
 
-        out = self.model(self.data.X)
+        loss = F.nll_loss(out[self.train_mask == 1], self.y[self.train_mask == 1])
 
-        loss = F.nll_loss(out[self.data.train_mask], self.data.y[self.data.train_mask])
         loss.backward()
         self.optimizer.step()
         return loss
 
-    def eval_model(self, data: GraphDataset):
+    def eval_model(self):
         with torch.no_grad():
             self.model.eval()
-            _, pred = self.model(self.data.X).max(dim=1)
+            out = self.model(self.data.x_dict, self.data.edge_index_dict)["doc"]
+            out = F.log_softmax(out, dim=1)
 
-            test_acc = (
-                float(pred[data.test_mask].eq(data.y[data.test_mask]).sum().item())
-                / data.test_mask.sum().item()
+            w_f1_test, macro_test, micro_test, acc_test = compute_metrics(
+                out[self.test_mask == 1], self.y[self.test_mask == 1]
             )
 
-            train_acc = (
-                float(pred[data.train_mask].eq(data.y[data.train_mask]).sum().item())
-                / data.train_mask.sum().item()
+            w_f1_train, macro_train, micro_train, acc_train = compute_metrics(
+                out[self.train_mask == 1], self.y[self.train_mask == 1]
             )
 
-            return 100.0 * train_acc, 100.0 * test_acc
+            return 100 * acc_train, 100 * acc_test
 
 
 # %%

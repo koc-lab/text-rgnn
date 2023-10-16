@@ -1,11 +1,73 @@
-import numpy as np
 import torch
-import torch.nn.functional as F
-from gensim.models.word2vec import KeyedVectors
-from gensim.models import Word2Vec
-from pathlib import Path
-from sklearn.metrics import accuracy_score, f1_score
 import random
+
+import numpy as np
+
+from sklearn.metrics import accuracy_score, f1_score
+
+import wandb
+import random
+import torch
+import numpy as np
+
+from pathlib import Path
+
+from src.constants import PROJECT_PATH
+from src.dataset import GraphDataset, GraphDatasetConfig
+
+from src.models import GNN, GAT
+
+from torch_geometric.nn import to_hetero
+
+
+def get_used_params(c):
+    used_params = {
+        "dataset": {
+            "dataset_name": c.dataset["dataset_name"],
+            "doc_doc_k": c.dataset["doc_doc_k"],
+            "word_word_k": c.dataset["word_word_k"],
+        },
+        "model": {
+            "model_name": c.model["model_name"],
+            "hidden_channels": c.model["hidden_channels"],
+        },
+        "optimizer": {
+            "lr": c.optimizer["lr"],
+            "weight_decay": c.optimizer["weight_decay"],
+        },
+        "trainer_pipeline": {
+            "max_epochs": c.trainer_pipeline["max_epochs"],
+            "patience": c.trainer_pipeline["patience"],
+        },
+        "seed_no": c.seed_no,
+    }
+    return used_params
+
+
+def get_sweep_variables(c):
+    config = GraphDatasetConfig(
+        dataset_name=c.dataset["dataset_name"],
+        doc_doc_k=c.dataset["doc_doc_k"],
+        word_word_k=c.dataset["word_word_k"],
+    )
+
+    graph_dataset = GraphDataset(config, word_to_word_graph=c.word_to_word_graph)
+    n_class = graph_dataset.processed_dataset.n_class
+    model = None
+
+    if c.model["model_name"] == "GNN":
+        model = GNN(hidden_channels=c.model["hidden_channels"], out_channels=n_class)
+    elif c.model["model_name"] == "GAT":
+        model = GAT(hidden_channels=c.model["hidden_channels"], out_channels=n_class)
+
+    model = to_hetero(model, graph_dataset.data.metadata(), aggr="sum")
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=c.optimizer["lr"],
+        weight_decay=c.optimizer["weight_decay"],
+    )
+
+    return graph_dataset, model, optimizer
 
 
 def set_seeds(seed_no: int = 42):
@@ -13,124 +75,6 @@ def set_seeds(seed_no: int = 42):
     np.random.seed(seed_no)
     torch.manual_seed(seed_no)
     torch.cuda.manual_seed_all(seed_no)
-
-
-def get_tfidf(documents, vocab, stoi):
-    """
-    calculating term frequency
-    """
-    word_freq = {word: 0 for word in vocab}
-    for doc in documents:
-        words = [word for word in doc.split() if word in vocab]
-        for word in words:
-            word_freq[word] += 1
-
-    doc_word_freq = {}
-    for doc_id, doc in enumerate(documents):
-        words = [word for word in doc.split() if word in vocab]
-        for word in words:
-            word_id = stoi[word]
-            doc_word_str = str(doc_id) + "," + str(word_id)
-            if doc_word_str in doc_word_freq:
-                doc_word_freq[doc_word_str] += 1
-            else:
-                doc_word_freq[doc_word_str] = 1
-
-    """
-        calculating inverse document frequency
-    """
-    row_nf, col_nf, weight_nf = [], [], []
-
-    for i, doc in enumerate(documents):
-        words = [word for word in doc.split() if word in vocab]
-        doc_word_set = set()
-        for word in words:
-            if word in doc_word_set:
-                continue
-            j = stoi[word]
-            key = str(i) + "," + str(j)
-            freq = doc_word_freq[key]
-
-            row_nf.append(i)
-            col_nf.append(j)
-            idf = np.log(1.0 * len(documents) / word_freq[vocab[j]])
-
-            weight_nf.append(freq * idf + 1e-6)
-            doc_word_set.add(word)
-
-    tensor1 = torch.tensor(row_nf)
-    tensor2 = torch.tensor(col_nf)
-
-    # Stack the two tensors vertically (along the first dimension)
-    edge_index = torch.stack([tensor1, tensor2], dim=0)
-    edge_attr = torch.tensor(weight_nf)
-    return edge_index, edge_attr
-
-
-def get_knn_from_similarity_matrix(
-    A: torch.Tensor,
-    k: int = 10,
-    # strategy: KNNType = KNNType.ZeroMask,
-):
-    """
-    Creating a KNN graph from similarity matrix
-
-    Strategy:
-        - ZeroMask: zero out the similarity matrix except for the top k similarities
-        - SoftMax: fill the zero out entries with -inf and apply softmax
-    """
-
-    I = torch.eye(A.size(0), dtype=A.dtype)
-    A_hat = A - I * A
-    _, top_k_indices = torch.topk(A_hat, k, dim=1)
-    mask = torch.zeros_like(A_hat)
-    mask.scatter_(1, top_k_indices, 1)
-    A_hat_masked = A_hat * mask
-    return A_hat_masked
-    # else:
-    # A_hat_masked[A_hat_masked == 0] = -float("inf")
-    # return F.softmax(A_hat_masked, dim=1)
-
-
-def sanity_check_for_embedding_matrix(
-    wv: KeyedVectors,
-    similarity_matrix: torch.tensor,
-    stoi: dict,
-    w1: str = "bad",
-    w2: str = "good",
-):
-    w1_vec = torch.tensor(wv[w1], dtype=torch.float).reshape(1, -1)
-    w2_vec = torch.tensor(wv[w2], dtype=torch.float).reshape(1, -1)
-
-    print(f"Word2Vec Simlarity:{wv.similarity(w1, w2)}")
-    print(f"Cosine Similarity: {F.cosine_similarity(w1_vec, w2_vec)}")
-    print(f"Similartiy matrix entry: {similarity_matrix[stoi[w1], stoi[w2]]}")
-
-
-def get_w2v_embeddings(dataset_name: str):
-    path = Path.cwd() / "w2v-models" / f"{dataset_name}" / "model.bin"
-    word2vec_model = Word2Vec.load(str(path))
-    wv = word2vec_model.wv
-    embeddings = [wv[word] for word in wv.index_to_key]
-    embeddings = torch.tensor(embeddings, dtype=torch.float)
-    return embeddings
-
-
-from sklearn.neighbors import kneighbors_graph as knn_graph
-import scipy.sparse as sp
-
-
-def get_knn_graph(X: torch.tensor, n_neighbours: int = 10):
-    A = knn_graph(X, n_neighbours, mode="distance", include_self=True, p=2)
-    if not sp.issparse(A):
-        A = sp.csr_matrix(A)
-
-    row_indices, col_indices = A.nonzero()
-    edge_index = np.vstack((row_indices, col_indices))
-    edge_attr = A[row_indices, col_indices]
-    edge_index = torch.tensor(edge_index, dtype=torch.long)
-    edge_attr = torch.tensor(edge_attr, dtype=torch.float)
-    return edge_index, edge_attr
 
 
 def compute_metrics(output, labels):
@@ -142,3 +86,64 @@ def compute_metrics(output, labels):
     micro = f1_score(y_true, y_pred, average="micro")
     acc = accuracy_score(y_true, y_pred)
     return w_f1, macro, micro, acc
+
+
+def save_checkpoint(ckpt: dict, dataset_name: str, acc, sweep_id):
+    test_acc_str = str(round(acc, 5)).replace(".", "_")
+    MODELS_DIR = Path.joinpath(
+        PROJECT_PATH,
+        "model_checkpoints",
+        dataset_name,
+    )
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+    SWEEP_ID_FOLDER = MODELS_DIR.joinpath(sweep_id)
+    SWEEP_ID_FOLDER.mkdir(parents=True, exist_ok=True)
+    FILE_NAME = f"acc:{test_acc_str}-{wandb.run.id}_ckpt.pth"
+
+    ckpt_path = Path.joinpath(MODELS_DIR, SWEEP_ID_FOLDER, FILE_NAME)
+    torch.save(ckpt, ckpt_path)
+
+
+def find_best_run(target_dataset: str):
+    # Define the base directory where your model_checkpoints are located
+    base_directory = Path.joinpath(PROJECT_PATH, "model_checkpoints")
+    highest_accuracy = 0.0
+    highest_accuracy_folder = None
+    highest_accuracy_file = None
+
+    # Iterate through the subfolders of the specified dataset
+    dataset_directory = base_directory / target_dataset
+    dataset_directory.mkdir(parents=True, exist_ok=True)
+
+    if dataset_directory.is_dir():
+        for subfolder in dataset_directory.iterdir():
+            # Check if it's a directory
+            if subfolder.is_dir():
+                # Iterate through files in the subfolder
+                for file_path in subfolder.iterdir():
+                    file_name = file_path.name
+                    if file_name.startswith("acc:"):
+                        # Extract the accuracy from the file name
+                        parts = file_name.split("-")
+                        accuracy_str = parts[0].split("acc:")[1].replace("_", ".")
+                        try:
+                            accuracy = float(accuracy_str)
+                            if accuracy > highest_accuracy:
+                                highest_accuracy = accuracy
+                                highest_accuracy_file = file_path
+                        except ValueError:
+                            pass
+
+    # Print the highest accuracy and its corresponding folder
+    if highest_accuracy_file is not None:
+        print("Highest Accuracy for", target_dataset, ":", highest_accuracy)
+        print("File Path:", highest_accuracy_file)
+    else:
+        print(
+            "No .pth files with accuracy found for",
+            target_dataset,
+            "in the directory structure.",
+        )
+
+    return highest_accuracy, highest_accuracy_file

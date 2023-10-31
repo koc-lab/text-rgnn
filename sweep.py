@@ -8,7 +8,7 @@ from src.utils import (
     find_best_run,
     get_sweep_variables,
 )
-
+import torch
 
 with open("sweep_params.yaml") as file:
     sweep_params = yaml.load(file, Loader=yaml.FullLoader)
@@ -22,8 +22,12 @@ def run_sweep(c: dict = None):
     set_seeds(c.seed_no)
 
     graph_dataset, model, optimizer = get_sweep_variables(c)
+    # train_mask_new = randomly_select_n_train_by_percentage(
+    # graph_dataset.processed_dataset.train_mask, c.n_train_percentage
+    # )
 
     trainer = Trainer(model, optimizer, graph_dataset)
+    # trainer.train_mask = train_mask_new
 
     trainer.pipeline(
         max_epochs=c.trainer_pipeline["max_epochs"],
@@ -46,6 +50,7 @@ def run_sweep(c: dict = None):
         )
 
     wandb.log(data={"test/best_test_acc": trainer.best_test_acc})
+    # wandb.log(data={"n_train_percentage_100": c.n_train_percentage * 100})
 
 
 sweep_id = wandb.sweep(sweep_params, project="text-rgcn")

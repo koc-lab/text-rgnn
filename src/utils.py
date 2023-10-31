@@ -105,7 +105,7 @@ def save_checkpoint(ckpt: dict, dataset_name: str, acc, sweep_id):
     torch.save(ckpt, ckpt_path)
 
 
-def find_best_run(target_dataset: str):
+def find_best_run(target_dataset: str, verbose: bool = False):
     # Define the base directory where your model_checkpoints are located
     base_directory = Path.joinpath(PROJECT_PATH, "model_checkpoints")
     highest_accuracy = 0.0
@@ -136,14 +136,38 @@ def find_best_run(target_dataset: str):
                             pass
 
     # Print the highest accuracy and its corresponding folder
-    if highest_accuracy_file is not None:
-        print("Highest Accuracy for", target_dataset, ":", highest_accuracy)
-        print("File Path:", highest_accuracy_file)
-    else:
-        print(
-            "No .pth files with accuracy found for",
-            target_dataset,
-            "in the directory structure.",
-        )
+    if verbose:
+        if highest_accuracy_file is not None:
+            print("Highest Accuracy for", target_dataset, ":", highest_accuracy)
+            print("File Path:", highest_accuracy_file)
+        else:
+            print(
+                "No .pth files with accuracy found for",
+                target_dataset,
+                "in the directory structure.",
+            )
 
     return highest_accuracy, highest_accuracy_file
+
+
+def randomly_select_n_train_by_percentage(mask_tensor, n_percentage):
+    # Find the indices that are already 1 in the mask_tensor
+    nonzero_indices = torch.nonzero(mask_tensor).squeeze()
+
+    # Calculate the number of training instances based on the percentage of 1s
+    n_train = int(n_percentage * len(nonzero_indices))
+
+    if n_train == 0:
+        # If the percentage results in zero training instances, return the original mask_tensor
+        return mask_tensor
+
+    # Shuffle the indices of the nonzero entries
+    shuffled_indices = nonzero_indices[torch.randperm(len(nonzero_indices))]
+
+    # Initialize a new mask tensor with all zeros
+    new_mask_tensor = torch.zeros_like(mask_tensor)
+
+    # Set the first n_train shuffled indices to 1
+    new_mask_tensor[shuffled_indices[:n_train]] = 1
+
+    return new_mask_tensor

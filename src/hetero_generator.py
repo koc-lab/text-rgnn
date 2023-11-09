@@ -33,7 +33,7 @@ def get_knn_graph(X: torch.tensor, n_neighbours: int = 10):
     edge_attr = A[row_indices, col_indices]
     edge_index = torch.tensor(edge_index, dtype=torch.long)
     edge_attr = torch.tensor(edge_attr, dtype=torch.float)
-    return edge_index, edge_attr
+    return edge_index, edge_attr, A
 
 
 def get_doc_embeddings(dataset_name: str):

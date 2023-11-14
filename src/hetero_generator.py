@@ -88,7 +88,7 @@ def get_hetero_data(
     data["doc"].test_mask = processed_dataset.test_mask
 
     # Doc-Doc Graph
-    e_i, e_a = get_knn_graph(data["doc"].x, n_neighbours=doc_doc_k)
+    e_i, e_a, A = get_knn_graph(data["doc"].x, n_neighbours=doc_doc_k)
     data["doc", "d2d", "doc"].edge_index = e_i
     data["doc", "d2d", "doc"].edge_attr = e_a
 

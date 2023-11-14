@@ -14,3 +14,5 @@ graph_dataset = GraphDataset(config)
 processed_dataset = graph_dataset.processed_dataset
 
 train_mask = graph_dataset.processed_dataset.train_mask
+
+model = GNN(hidden_channels=1433, out_channels=7)

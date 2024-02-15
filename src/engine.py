@@ -1,10 +1,12 @@
 # %%
+import copy
+
 import torch
-import wandb
 import torch.nn.functional as F
 from tqdm.auto import tqdm
-import copy
-from src.dataset import GraphDataset
+
+import wandb
+from src.graph_dataset import GraphDataset
 from src.utils import compute_metrics
 
 
@@ -19,7 +21,7 @@ class Trainer:
         self.model = model
 
         self.graph_dataset = graph_dataset
-        self.data = self.graph_dataset.data
+        self.data = self.graph_dataset.hetero_data
         self.data_doc = self.data["doc"]
 
         self.train_mask = self.data_doc.train_mask
@@ -60,7 +62,9 @@ class Trainer:
         self.model.train()
         self.optimizer.zero_grad()
 
-        out = self.model(self.data.x_dict, self.data.edge_index_dict)["doc"]
+        out = self.model(
+            self.data.x_dict, self.data.edge_index_dict, self.data.edge_attr_dict
+        )["doc"]
         out = F.log_softmax(out, dim=1)
 
         loss = F.nll_loss(out[self.train_mask == 1], self.y[self.train_mask == 1])
@@ -72,7 +76,9 @@ class Trainer:
     def eval_model(self):
         with torch.no_grad():
             self.model.eval()
-            out = self.model(self.data.x_dict, self.data.edge_index_dict)["doc"]
+            out = self.model(
+                self.data.x_dict, self.data.edge_index_dict, self.data.edge_attr_dict
+            )["doc"]
             out = F.log_softmax(out, dim=1)
 
             w_f1_test, macro_test, micro_test, acc_test = compute_metrics(

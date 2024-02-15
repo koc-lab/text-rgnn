@@ -176,3 +176,5 @@ model_checkpoints/
 poetry.lock
 *w2v-models/
 *tf-idf-graphs/
+
+*.xlsx

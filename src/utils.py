@@ -1,23 +1,15 @@
-import torch
 import random
-
-import numpy as np
-
-from sklearn.metrics import accuracy_score, f1_score
-
-import wandb
-import random
-import torch
-import numpy as np
-
 from pathlib import Path
 
-from src.constants import PROJECT_PATH
-from src.dataset import GraphDataset, GraphDatasetConfig
-
-from src.models import GNN, GAT
-
+import numpy as np
+import torch
+from sklearn.metrics import accuracy_score, f1_score
 from torch_geometric.nn import to_hetero
+
+import wandb
+from src.constants import PROJECT_PATH
+from src.graph_dataset import GraphDataset, GraphDatasetConfig
+from src.models import GAT, GNN
 
 
 def get_used_params(c):

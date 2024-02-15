@@ -5,12 +5,12 @@ import torch_geometric.transforms as T
 from torch_geometric.nn import GCNConv
 from torch_geometric.transforms import NormalizeFeatures, GCNNorm
 import numpy as np
-from src.hetero_generator import (
-    load_variables,
-    get_doc_embeddings,
-    get_word_embeddings,
-    get_knn_graph,
-    get_doc_word_graph,
+from graph_dataset_utils import (
+    load_processed_dataset,
+    load_doc_embeddings,
+    load_word_embeddings,
+    generate_knn_graph,
+    load_doc_word_graph,
 )
 from torch_geometric.data import Data
 
@@ -20,23 +20,23 @@ import numpy as np
 def get_homogenous_data(dataset_name: str):
     doc_doc_k = 50
     word_word_k = 50
-    processed_dataset, vocab, stoi, itos = load_variables(dataset_name)
+    processed_dataset, vocab, stoi, itos = load_processed_dataset(dataset_name)
 
-    doc_x = get_doc_embeddings(dataset_name).to("cpu")
-    word_x = get_word_embeddings(dataset_name)
+    doc_x = load_doc_embeddings(dataset_name).to("cpu")
+    word_x = load_word_embeddings(dataset_name)
 
     doc_y = processed_dataset.label
     doc_train_mask = processed_dataset.train_mask
     doc_test_mask = processed_dataset.test_mask
 
     # Doc-Doc Graph
-    e_i, e_a, N = get_knn_graph(doc_x, n_neighbours=doc_doc_k)
-    e_i, e_a, V = get_knn_graph(word_x, n_neighbours=word_word_k)
+    e_i, e_a, N = generate_knn_graph(doc_x, n_neighbours=doc_doc_k)
+    e_i, e_a, V = generate_knn_graph(word_x, n_neighbours=word_word_k)
 
     N = N.toarray()
     V = V.toarray()
 
-    e_i, e_a = get_doc_word_graph(dataset_name)
+    e_i, e_a = load_doc_word_graph(dataset_name)
     n = e_i[0].max() + 1  # Assuming document nodes are in the first row of e_i
     m = e_i[1].max() + 1  # Assuming word nodes are in the second row of e_i
 

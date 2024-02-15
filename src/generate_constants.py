@@ -1,7 +1,8 @@
-import torch
 from pathlib import Path
-from src.hetero_generator import load_variables
+
 import numpy as np
+import torch
+from graph_dataset_utils import load_processed_dataset
 
 
 def get_tfidf(documents, vocab, stoi):
@@ -58,7 +59,7 @@ def get_tfidf(documents, vocab, stoi):
 
 if __name__ == "__main__":
     for dataset_name in ["mr", "ohsumed", "R8", "R52"]:
-        processed_dataset, vocab, stoi, itos = load_variables(dataset_name)
+        processed_dataset, vocab, stoi, itos = load_processed_dataset(dataset_name)
         edge_index, edge_attr = get_tfidf(processed_dataset.text, vocab, stoi)
         TF_IDF_DIR = Path.cwd() / "tf-idf-graphs"
         TF_IDF_DIR.mkdir(parents=True, exist_ok=True)

@@ -18,13 +18,36 @@ torch = "2.0.0"
 gensim = "^4.3.2"
 torch-geometric = "^2.3.1"
 wandb = "^0.15.12"
+nltk = "^3.8.1"
+openpyxl = "^3.1.2"
 
-[tool.poetry.dev-dependencies]
-black = "^22.3.0"
-ipykernel = "^6.13.0"
-pytest = "^7.1.2"
-poethepoet = "^0.13.1"
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.26.0"
+ruff = "^0.1.9"
+mypy = "^1.8.0"
+
+[tool.ruff]
+line-length = 250
+
+[tool.ruff.format]
+# Like Black
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint]
+extend-select = [
+    "A",  # flake8-builtins
+    "B",  # flake8-bugbear
+    "S",  # flake8-bandit
+    "I",  # isort
+    "UP", # pyupgrade
+]
+
+[tool.ruff.lint.extend-per-file-ignores]
+"*" = ["S101", "S301", "S311"]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

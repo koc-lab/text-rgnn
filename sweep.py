@@ -1,12 +1,13 @@
-import wandb
 import yaml
+
+import wandb
 from src.engine import Trainer
 from src.utils import (
-    set_seeds,
-    save_checkpoint,
-    get_used_params,
     find_best_run,
     get_sweep_variables,
+    get_used_params,
+    save_checkpoint,
+    set_seeds,
 )
 
 with open("sweep_params.yaml") as file:

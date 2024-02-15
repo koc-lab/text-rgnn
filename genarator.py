@@ -17,3 +17,5 @@ for dataset_name in ["ohsumed", "R8", "R52", "mr"]:
         print("Test Passed for dataset: ", dataset_name)
     else:
         print("Test Failed for dataset: ", dataset_name)
+
+# %%

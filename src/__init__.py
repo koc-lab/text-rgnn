@@ -1,6 +1,9 @@
 from pathlib import Path
 
-PROJECT_PATH = Path("/Users/ardaaras/Documents/text-rgcn")
+#! if you have problems with project path, manually set it
+# PROJECT_PATH = Path("/Users/ardaaras/Documents/text-rgcn")
+
+PROJECT_PATH = Path.cwd()
 ORIGINAL_DATA_PATH = PROJECT_PATH / "data/original-data"
 W2V_MODELS_PATH = PROJECT_PATH / "data/w2v-models"
 TF_IDF_GRAPHS_PATH = PROJECT_PATH / "data/tf-idf-graphs"

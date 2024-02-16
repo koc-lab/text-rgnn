@@ -1,13 +1,14 @@
-import wandb
 import yaml
+
+import wandb
 from src.engine import Trainer
 from src.utils import (
-    set_seeds,
-    save_checkpoint,
-    get_used_params,
     find_best_run,
     get_sweep_variables,
-    randomly_select_n_train_by_percentage,
+    get_used_params,
+    select_by_ratio,
+    save_checkpoint,
+    set_seeds,
 )
 
 with open("sweep_params2.yaml") as file:
@@ -23,8 +24,8 @@ def run_sweep(c: dict = None):
 
     graph_dataset, model, optimizer = get_sweep_variables(c)
     if c.n_train_percentage != 1:
-        train_mask_new = randomly_select_n_train_by_percentage(
-            graph_dataset.processed_dataset.train_mask, c.n_train_percentage
+        train_mask_new = select_by_ratio(
+            graph_dataset.text_dataset.train_mask, c.n_train_percentage
         )
 
         trainer = Trainer(model, optimizer, graph_dataset)

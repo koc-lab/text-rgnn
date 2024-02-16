@@ -1,65 +1,42 @@
+import pickle
 import random
 from pathlib import Path
 
 import numpy as np
 import torch
+from gensim.models import Word2Vec
 from sklearn.metrics import accuracy_score, f1_score
-from torch_geometric.nn import to_hetero
 
 import wandb
-from src.constants import PROJECT_PATH
-from src.graph_dataset import GraphDataset, GraphDatasetConfig
-from src.models import GAT, GNN
+from src import PROJECT_PATH, TF_IDF_GRAPHS_PATH, W2V_MODELS_PATH
+
+## Loaders
 
 
-def get_used_params(c):
-    used_params = {
-        "dataset": {
-            "dataset_name": c.dataset["dataset_name"],
-            "doc_doc_k": c.dataset["doc_doc_k"],
-            "word_word_k": c.dataset["word_word_k"],
-        },
-        "model": {
-            "model_name": c.model["model_name"],
-            "hidden_channels": c.model["hidden_channels"],
-        },
-        "optimizer": {
-            "lr": c.optimizer["lr"],
-            "weight_decay": c.optimizer["weight_decay"],
-        },
-        "trainer_pipeline": {
-            "max_epochs": c.trainer_pipeline["max_epochs"],
-            "patience": c.trainer_pipeline["patience"],
-        },
-        "seed_no": c.seed_no,
-    }
-    return used_params
+def load_word_embeddings(dataset_name: str):
+    path = W2V_MODELS_PATH / f"{dataset_name}" / "model.bin"
+    model = Word2Vec.load(str(path))
+    wv = model.wv
+    embeddings = np.array([wv[word] for word in wv.index_to_key])
+    embeddings = torch.tensor(embeddings, dtype=torch.float)
+    return embeddings
 
 
-def get_sweep_variables(c):
-    config = GraphDatasetConfig(
-        dataset_name=c.dataset["dataset_name"],
-        doc_doc_k=c.dataset["doc_doc_k"],
-        word_word_k=c.dataset["word_word_k"],
-    )
+def load_tfidf_graph(dataset_name: str):
+    file_path = TF_IDF_GRAPHS_PATH / f"{dataset_name}.pth"
+    edge_index, edge_attr = torch.load(file_path)
+    return edge_index, edge_attr
 
-    graph_dataset = GraphDataset(config, word_to_word_graph=c.word_to_word_graph)
-    n_class = graph_dataset.processed_dataset.n_class
-    model = None
 
-    if c.model["model_name"] == "GNN":
-        model = GNN(hidden_channels=c.model["hidden_channels"], out_channels=n_class)
-    elif c.model["model_name"] == "GAT":
-        model = GAT(hidden_channels=c.model["hidden_channels"], out_channels=n_class)
+def load_vocab(dataset_name: str):
+    vocab_path = W2V_MODELS_PATH / f"{dataset_name}" / "vocab.pkl"
+    with open(vocab_path, "rb") as file:
+        vocab = pickle.load(file)
+        vocab = vocab[0]
+    return vocab
 
-    model = to_hetero(model, graph_dataset.data.metadata(), aggr="sum")
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=c.optimizer["lr"],
-        weight_decay=c.optimizer["weight_decay"],
-    )
 
-    return graph_dataset, model, optimizer
+## General Utils
 
 
 def set_seeds(seed_no: int = 42):
@@ -101,7 +78,7 @@ def find_best_run(target_dataset: str, verbose: bool = False):
     # Define the base directory where your model_checkpoints are located
     base_directory = Path.joinpath(PROJECT_PATH, "model_checkpoints")
     highest_accuracy = 0.0
-    highest_accuracy_folder = None
+    # highest_accuracy_folder = None
     highest_accuracy_file = None
 
     # Iterate through the subfolders of the specified dataset
@@ -142,24 +119,51 @@ def find_best_run(target_dataset: str, verbose: bool = False):
     return highest_accuracy, highest_accuracy_file
 
 
-def randomly_select_n_train_by_percentage(mask_tensor, n_percentage):
-    # Find the indices that are already 1 in the mask_tensor
-    nonzero_indices = torch.nonzero(mask_tensor).squeeze()
+# def get_used_params(c):
+#     used_params = {
+#         "dataset": {
+#             "dataset_name": c.dataset["dataset_name"],
+#             "doc_doc_k": c.dataset["doc_doc_k"],
+#             "word_word_k": c.dataset["word_word_k"],
+#         },
+#         "model": {
+#             "model_name": c.model["model_name"],
+#             "hidden_channels": c.model["hidden_channels"],
+#         },
+#         "optimizer": {
+#             "lr": c.optimizer["lr"],
+#             "weight_decay": c.optimizer["weight_decay"],
+#         },
+#         "trainer_pipeline": {
+#             "max_epochs": c.trainer_pipeline["max_epochs"],
+#             "patience": c.trainer_pipeline["patience"],
+#         },
+#         "seed_no": c.seed_no,
+#     }
+#     return used_params
 
-    # Calculate the number of training instances based on the percentage of 1s
-    n_train = int(n_percentage * len(nonzero_indices))
 
-    if n_train == 0:
-        # If the percentage results in zero training instances, return the original mask_tensor
-        return mask_tensor
+# def get_sweep_variables(c):
+#     config = GraphDatasetConfig(
+#         dataset_name=c.dataset["dataset_name"],
+#         doc_doc_k=c.dataset["doc_doc_k"],
+#         word_word_k=c.dataset["word_word_k"],
+#     )
 
-    # Shuffle the indices of the nonzero entries
-    shuffled_indices = nonzero_indices[torch.randperm(len(nonzero_indices))]
+#     graph_dataset = GraphDataset(config, word_to_word_graph=c.word_to_word_graph)
+#     n_class = graph_dataset.text_dataset.n_class
+#     model = None
 
-    # Initialize a new mask tensor with all zeros
-    new_mask_tensor = torch.zeros_like(mask_tensor)
+#     if c.model["model_name"] == "GNN":
+#         model = GNN(hidden_channels=c.model["hidden_channels"], out_channels=n_class)
+#     elif c.model["model_name"] == "GAT":
+#         model = GAT(hidden_channels=c.model["hidden_channels"], out_channels=n_class)
 
-    # Set the first n_train shuffled indices to 1
-    new_mask_tensor[shuffled_indices[:n_train]] = 1
+#     model = to_hetero(model, graph_dataset.data.metadata(), aggr="sum")
+#     optimizer = torch.optim.Adam(
+#         model.parameters(),
+#         lr=c.optimizer["lr"],
+#         weight_decay=c.optimizer["weight_decay"],
+#     )
 
-    return new_mask_tensor
+#     return graph_dataset, model, optimizer

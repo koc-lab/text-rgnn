@@ -2,7 +2,7 @@ import torch
 from torch_geometric.nn import GATConv, Linear, SAGEConv
 
 
-class GNN(torch.nn.Module):
+class GraphSAGE(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
         self.conv1 = SAGEConv((-1, -1), hidden_channels)

@@ -178,3 +178,4 @@ poetry.lock
 *tf-idf-graphs/
 
 *.xlsx
+*.pkl

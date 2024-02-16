@@ -21,37 +21,30 @@ class Trainer:
         self.model = model
 
         self.graph_dataset = graph_dataset
-        self.data = self.graph_dataset.hetero_data
+        self.data = self.graph_dataset.data
         self.data_doc = self.data["doc"]
 
         self.train_mask = self.data_doc.train_mask
         self.test_mask = self.data_doc.test_mask
         self.y = self.data_doc.y.reshape(-1)
 
-    def pipeline(
-        self,
-        max_epochs: int,
-        patience: int,
-        wandb_flag: bool = False,
-    ):
-        early_stopping = EarlyStopping(patience=patience, verbose=False)
+    def pipeline(self, max_epochs: int, patience: int, wandb_flag: bool = False):
+        early_stop = EarlyStopping(patience=patience, verbose=False)
 
         t = tqdm(range(max_epochs))
         for epoch in t:
-            self.model.train()
             e_loss = self.train_epoch()
-
             train_acc, test_acc = self.eval_model()
 
             if wandb_flag:
                 epoch_wandb_log(e_loss, train_acc, test_acc, epoch)
 
-            best_test_acc, best_model = early_stopping(test_acc, self.model, epoch)
+            best_test_acc, best_model = early_stop(test_acc, self.model, epoch)
             t.set_description(
                 f"Loss: {e_loss:.4f}, Best Test Acc: {best_test_acc:.3f}, Train Acc: {train_acc:.3f}"
             )
 
-            if early_stopping.early_stop:
+            if early_stop.early_stop:
                 break
 
         self.best_model = best_model

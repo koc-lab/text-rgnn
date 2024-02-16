@@ -1,66 +1,114 @@
+from dataclasses import dataclass
+from pathlib import Path
+
+import torch
 import torch_geometric.transforms as T
 from torch_geometric.data import HeteroData
 
-from src.configurations import GraphDatasetConfig
-from src.graph_dataset_utils import (
-    generate_knn_graph,
-    load_doc_embeddings,
-    load_doc_word_graph,
-    load_processed_dataset,
-    load_word_embeddings,
-)
-from src.preprocess import ProcessedDataset
+from src.graph_generators import generate_knn_graph
+from src.text_dataset import TextDataset
+from src.utils import load_tfidf_graph, load_vocab, load_word_embeddings
+
+
+@dataclass
+class GraphDatasetConfig:
+    dataset_name: str
+    doc_doc_k: int
+    word_word_k: int
+    train_ratio: float  #! Train ratio for train_mask
+    use_w2w_graph: bool = False  #! Word 2 Word Graph sometimes not works
 
 
 class GraphDataset:
     def __init__(self, c: GraphDatasetConfig):
-        dataset, vocab, stoi, itos = load_processed_dataset(c.dataset_name)
+        self.c = c
+        self.text_dataset = TextDataset(c.dataset_name)
+        self.vocab = load_vocab(c.dataset_name)
 
-        self.hetero_data = generate_hetero(
-            c.dataset_name, dataset, c.doc_doc_k, c.word_word_k, c.use_w2w_graph
-        )
+        #! self.train_mask includes the certain percentage of the original train mask
+        #! to access original train mask use self.text_dataset.train_mask
+        self.train_mask = self.random_mask_selection()
 
-        self.hetero_data = T.ToUndirected()(self.hetero_data)
-        self.hetero_data = T.AddSelfLoops()(self.hetero_data)
+        self.generate_hetero()
+        self.transform()
 
-        self.config = c
-        self.processed_dataset = dataset
-        self.n_class = dataset.n_class
+    def generate_hetero(self):
+        self.data = HeteroData()
+        self.data["word"].x = load_word_embeddings(self.c.dataset_name)
+        self.data["doc"].x = load_doc_embeddings(self.c.dataset_name).to("cpu")
 
-        self.vocab = vocab
-        self.stoi = stoi
-        self.itos = itos
+        self.data["doc"].y = self.text_dataset.labels
+        self.data["doc"].train_mask = self.train_mask
+        self.data["doc"].test_mask = self.text_dataset.test_mask
+
+        # Doc-Doc Graph
+        e_i, e_a = generate_knn_graph(self.data["doc"].x, k=self.c.doc_doc_k)
+        self.data["doc", "d2d", "doc"].edge_index = e_i
+        self.data["doc", "d2d", "doc"].edge_attr = e_a
+
+        # Doc-Word Graph
+        e_i, e_a = load_tfidf_graph(self.c.dataset_name)
+        self.data["doc", "d2w", "word"].edge_index = e_i
+        self.data["doc", "d2w", "word"].edge_attr = e_a
+
+        # Word-Word Graph
+        if self.c.use_w2w_graph:
+            e_i, e_a = generate_knn_graph(self.data["word"].x, k=self.c.word_word_k)
+            self.data["word", "w2w", "word"].edge_index = e_i
+            self.data["word", "w2w", "word"].edge_attr = e_a
+
+    def transform(self):
+        self.data = T.ToUndirected()(self.data)
+        self.data = T.AddSelfLoops()(self.data)
+
+    def random_mask_selection(self) -> torch.Tensor:
+        """
+        Randomly selects a subset of the training mask tensor.
+        Parameters:
+            None
+        Returns:
+            torch.Tensor: Mask tensor representing the randomly selected subset of the training data.
+        """
+        nonzero_idx = torch.nonzero(self.text_dataset.train_mask).squeeze()
+        n_train = int(self.c.train_ratio * len(nonzero_idx))
+
+        if self.c.train_ratio == 1.0:
+            return self.text_dataset.train_mask
+        else:
+            shuffled_idxs = nonzero_idx[torch.randperm(len(nonzero_idx))]
+            new_mask_tensor = torch.zeros_like(self.text_dataset.train_mask)
+            new_mask_tensor[shuffled_idxs[:n_train]] = 1
+            return new_mask_tensor
 
 
-def generate_hetero(
-    dataset_name: str,
-    processed_dataset: ProcessedDataset,
-    doc_doc_k: int,
-    word_word_k: int,
-    use_w2w_graph: bool,
-):
-    data = HeteroData()
-    data["word"].x = load_word_embeddings(dataset_name)
-    data["doc"].x = load_doc_embeddings(dataset_name).to("cpu")
+def load_doc_embeddings(dataset_name: str):
+    if dataset_name == "sst2" or "cola":
+        data = TextDataset(dataset_name)
+        size = len(data.documents)
+        #! need a fine-tuned embeddings for SST2 and COLA
+        return torch.rand(size, 768)
+    else:
+        DOCUMENTS_PATH = Path.cwd().parent
+        EMBEDDINGS_PATH = DOCUMENTS_PATH / "finetune-text-graphs/generator-output"
+        file_name = f"{dataset_name}_embeddings.pth"
+        embeddings = torch.load(EMBEDDINGS_PATH / file_name)
+    return embeddings
 
-    data["doc"].y = processed_dataset.label
-    data["doc"].train_mask = processed_dataset.train_mask
-    data["doc"].test_mask = processed_dataset.test_mask
 
-    # Doc-Doc Graph
-    e_i, e_a, A = generate_knn_graph(data["doc"].x, n_neighbours=doc_doc_k)
-    data["doc", "d2d", "doc"].edge_index = e_i
-    data["doc", "d2d", "doc"].edge_attr = e_a
+# def sanity_check_for_embedding_matrix(
+#     wv: KeyedVectors,
+#     similarity_matrix: torch.tensor,
+#     stoi: dict,
+#     w1: str = "bad",
+#     w2: str = "good",
+# ):
+#     w1_vec = torch.tensor(wv[w1], dtype=torch.float).reshape(1, -1)
+#     w2_vec = torch.tensor(wv[w2], dtype=torch.float).reshape(1, -1)
 
-    # Word-Word Graph
-    if use_w2w_graph:
-        e_i, e_a, A = generate_knn_graph(data["word"].x, n_neighbours=word_word_k)
-        data["word", "w2w", "word"].edge_index = e_i
-        data["word", "w2w", "word"].edge_attr = e_a
+#     print(f"Word2Vec Simlarity:{wv.similarity(w1, w2)}")
+#     print(f"Cosine Similarity: {F.cosine_similarity(w1_vec, w2_vec)}")
+#     print(f"Similartiy matrix entry: {similarity_matrix[stoi[w1], stoi[w2]]}")
 
-    # Doc-Word Graph
-    e_i, e_a = load_doc_word_graph(dataset_name)
-    data["doc", "d2w", "word"].edge_index = e_i
-    data["doc", "d2w", "word"].edge_attr = e_a
 
-    return data
+#     stoi = {word: i for i, word in enumerate(vocab)}
+#     itos = {i: word for i, word in enumerate(vocab)}

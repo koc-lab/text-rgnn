@@ -6,7 +6,6 @@ from src.w2vec import w2v_pipeline
 #! There is an assumption that you downloaded the original-data and placed it in data/original-data
 
 # Create the required folders
-
 for dataset_name in ["mr", "R8", "R52", "ohsumed", "sst2", "cola"]:
     # Train word2vec models for all datasets both for embedding and vocab
     print(f"Training word2vec model for {dataset_name}...")

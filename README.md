@@ -8,7 +8,7 @@ Please address each section below, we gave them in specific order. Follow each s
 
 ### Datasets
 
-Before running the code, ensure you have the necessary datasets. We utilized MR, R8, R52, and Ohsumed datasets, commonly employed for sentiment classification in the graph domain. Download these datasets from the provided link. Once downloaded, create a folder named "data" and place the corpus under "data/original-data".
+We utilized MR, R8, R52, and Ohsumed datasets, commonly employed for sentiment classification in the graph domain. Download these datasets from the [here](https://drive.google.com/file/d/12MuBbeztEUBAvFGHiTY-rAsXq2LcdXRX/view?usp=sharing). Once downloaded, create a folder named "data" and place the corpus under "data/original-data".
 
 For datasets sourced from GLUE, such as SST-2 and CoLA, there's no need to download them separately.
 

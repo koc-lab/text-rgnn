@@ -14,7 +14,7 @@ from src import PROJECT_PATH, TF_IDF_GRAPHS_PATH, W2V_MODELS_PATH
 
 
 def load_word_embeddings(dataset_name: str):
-    path = W2V_MODELS_PATH / f"{dataset_name}" / "model.bin"
+    path = W2V_MODELS_PATH.joinpath(f"{dataset_name}", "model.bin")
     model = Word2Vec.load(str(path))
     wv = model.wv
     embeddings = np.array([wv[word] for word in wv.index_to_key])
@@ -23,13 +23,13 @@ def load_word_embeddings(dataset_name: str):
 
 
 def load_tfidf_graph(dataset_name: str):
-    file_path = TF_IDF_GRAPHS_PATH / f"{dataset_name}.pth"
+    file_path = TF_IDF_GRAPHS_PATH.joinpath(f"{dataset_name}.pth")
     edge_index, edge_attr = torch.load(file_path)
     return edge_index, edge_attr
 
 
 def load_vocab(dataset_name: str):
-    vocab_path = W2V_MODELS_PATH / f"{dataset_name}" / "vocab.pkl"
+    vocab_path = W2V_MODELS_PATH.joinpath(f"{dataset_name}", "vocab.pkl")
     with open(vocab_path, "rb") as file:
         vocab = pickle.load(file)
         vocab = vocab[0]

@@ -10,10 +10,10 @@ from src.text_dataset import TextDataset
 
 def w2v_pipeline(dataset_name: str):
 
-    folder_path = W2V_MODELS_PATH / dataset_name
+    folder_path = W2V_MODELS_PATH.joinpath(dataset_name)
     folder_path.mkdir(parents=True, exist_ok=True)
-    model_path = folder_path / "model.bin"
-    vocab_path = folder_path / "vocab.pkl"
+    model_path = folder_path.joinpath("model.bin")
+    vocab_path = folder_path.joinpath("vocab.pkl")
 
     if not check_model_and_vocab_path(dataset_name, model_path, vocab_path):
         textdataset = TextDataset(dataset_name)

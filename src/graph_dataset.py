@@ -88,10 +88,11 @@ def load_doc_embeddings(dataset_name: str):
         #! need a fine-tuned embeddings for SST2 and COLA
         return torch.rand(size, 768)
     else:
-        DOCUMENTS_PATH = Path.cwd().parent
-        EMBEDDINGS_PATH = DOCUMENTS_PATH / "finetune-text-graphs/generator-output"
+        EMBEDDINGS_PATH = Path.cwd().parent.joinpath(
+            "finetune-text-graphs/generator-output"
+        )
         file_name = f"{dataset_name}_embeddings.pth"
-        embeddings = torch.load(EMBEDDINGS_PATH / file_name)
+        embeddings = torch.load(EMBEDDINGS_PATH.joinpath(file_name))
     return embeddings
 
 

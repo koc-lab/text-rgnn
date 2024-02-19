@@ -1,12 +1,26 @@
+import pickle
 from pathlib import Path
+
+import datasets
 
 #! if you have problems with project path, manually set it
 # PROJECT_PATH = Path("/Users/ardaaras/Documents/text-rgcn")
 
 PROJECT_PATH = Path.cwd()
-ORIGINAL_DATA_PATH = PROJECT_PATH / "data/original-data"
-W2V_MODELS_PATH = PROJECT_PATH / "data/w2v-models"
-TF_IDF_GRAPHS_PATH = PROJECT_PATH / "data/tf-idf-graphs"
+ORIGINAL_DATA_PATH = PROJECT_PATH.joinpath("data/original-data")
+W2V_MODELS_PATH = PROJECT_PATH.joinpath("data/w2v-models")
+TF_IDF_GRAPHS_PATH = PROJECT_PATH.joinpath("data/tf-idf-graphs")
+GLUE_DATA_PATH = PROJECT_PATH.joinpath("data/glue-data")
+
+W2V_MODELS_PATH.mkdir(parents=True, exist_ok=True)
+TF_IDF_GRAPHS_PATH.mkdir(parents=True, exist_ok=True)
+GLUE_DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+# Load the GLUE data and save it as pickle
+for dataset in ["cola", "sst2"]:
+    data = datasets.load_dataset("glue", dataset)
+    pickle.dump(data, open(GLUE_DATA_PATH.joinpath(f"{dataset}_raw_data.pkl"), "wb"))
+
 
 LABEL_TO_INT_MAP = {
     "ohsumed": {

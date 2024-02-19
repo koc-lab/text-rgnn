@@ -25,7 +25,7 @@ def generate_tfidf_graph(dataset_name: str):
 
 
 def tfidf_pipeline(dataset_name: str):
-    file_path = TF_IDF_GRAPHS_PATH / f"{dataset_name}.pth"
+    file_path = TF_IDF_GRAPHS_PATH.joinpath(f"{dataset_name}.pth")
     if file_path.exists():
         print(f"TF-IDF graph for {dataset_name} already exists. Skipping...")
         return

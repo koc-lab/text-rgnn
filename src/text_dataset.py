@@ -1,10 +1,9 @@
 import pickle
-import time
 from typing import List
 
 import torch
 
-from src import LABEL_TO_INT_MAP, ORIGINAL_DATA_PATH
+from src import GLUE_DATA_PATH, LABEL_TO_INT_MAP, ORIGINAL_DATA_PATH
 
 
 class TextDataset:
@@ -27,7 +26,9 @@ class TextDataset:
         self.n_class = len(list(set(raw_label)))
 
     def pipeline2(self, dataset_name):
-        raw_data = pickle.load(open(f"{dataset_name}_raw_data.pkl", "rb"))
+        file_path = GLUE_DATA_PATH.joinpath(f"{dataset_name}_raw_data.pkl")
+        raw_data = pickle.load(open(file_path, "rb"))
+        
         if dataset_name == "sst2":
             #! for sst2 select only 30k samples since it has 67k samples
             train = raw_data["train"].to_pandas()[:30000]
@@ -58,7 +59,7 @@ class TextDataset:
         raw_label, train_ids, test_ids = [], [], []
         documents = []
 
-        raw_data_path = ORIGINAL_DATA_PATH / f"label-info/{dataset_name}.txt"
+        raw_data_path = ORIGINAL_DATA_PATH.joinpath(f"label-info/{dataset_name}.txt")
 
         file = open(raw_data_path)
         lines = file.readlines()
@@ -72,7 +73,7 @@ class TextDataset:
                 train_ids.append(i)
         file.close()
 
-        raw_data_path = ORIGINAL_DATA_PATH / f"corpus/clean/{dataset_name}.txt"
+        raw_data_path = ORIGINAL_DATA_PATH.joinpath(f"corpus/clean/{dataset_name}.txt")
         file = open(raw_data_path)
         lines = file.readlines()
         for line in lines:

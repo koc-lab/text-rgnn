@@ -1,6 +1,6 @@
-# Text-Relational Graph Neural Networks (Text-RGNN) for Text Classification
+# Text-Relational Graph Neural Networks (Text-RGNNs) for Text Classification
 
-This repository contains the implementation of Text-Relational Graph Neural Networks (Text-RGNN) *under review in IEEE SPL* for text classification tasks. The model leverages heterogeneous graph neural networks to capture complex relationships in text data, significantly improving performance on benchmark datasets.
+This repository contains the implementation of Text-Relational Graph Neural Networks (Text-RGNNs) presented in the paper [_Text-RGNNs: Relational Modeling for Heterogeneous Text Graphs_](https://doi.org/10.1109/LSP.2024.3433568) published in _IEEE Signal Processing Letters_. The model leverages heterogeneous graph neural networks to capture complex relationships in text data, significantly improving performance on benchmark datasets.
 
 # Evaluation Results for Best Models with All Splits
 
